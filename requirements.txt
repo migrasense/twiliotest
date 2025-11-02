@@ -1,5 +1,5 @@
 fastapi
 uvicorn
 requests
-deepgram-sdk
+deepgram-sdk>=3.0.0
 python-multipart
