@@ -45,7 +45,7 @@ async def twilio_voice():
 
     <!-- Step 2: Greeting plays while Deepgram is already connected -->
     <Say voice="Polly.Joanna">
-        Hello! You've reached Servoice, your virtual assistant.
+        Hello! You’ve reached Servoice, your virtual assistant.
         How can I help you today?
     </Say>
 
@@ -102,8 +102,8 @@ async def audio_stream(websocket: WebSocket):
 
     dg_socket = deepgram.listen.live.v("1")
     
-    # Capture the running event loop
-    loop = asyncio.get_event_loop()
+    # Get the event loop for this coroutine (main websocket handler thread)
+    event_loop = asyncio.get_event_loop()
 
     # ---- Process Transcript ----
     async def process_transcript(transcript):
@@ -137,8 +137,11 @@ async def audio_stream(websocket: WebSocket):
         try:
             alt = result.channel.alternatives[0]
             if alt.transcript and getattr(result, "is_final", False):
-                # ✅ Schedule the coroutine on the main event loop from the background thread
-                loop.call_soon_threadsafe(asyncio.create_task, process_transcript(alt.transcript))
+                # ✅ Schedule the coroutine in the correct event loop using run_coroutine_threadsafe
+                asyncio.run_coroutine_threadsafe(
+                    process_transcript(alt.transcript),
+                    event_loop
+                )
         except Exception as e:
             print("Transcript error:", e)
 
