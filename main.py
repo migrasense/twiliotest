@@ -4,7 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRouter
 import os, json, base64, asyncio, uuid, requests
 from io import BytesIO
-from deepgram import DeepgramClient, SpeakOptions, LiveOptions
+from deepgram import DeepgramClient
+from deepgram.speak import SpeakOptions
+from deepgram.listen import LiveOptions
 from deepgram.core import EventType
 
 app = FastAPI()
