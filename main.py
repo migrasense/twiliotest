@@ -50,7 +50,7 @@ async def twilio_voice():
     </Say>
 
     <!-- Step 3: Keep the line open for 45 seconds -->
-    <Pause length="50"/>
+    <Pause length="30"/>
 
     <!-- Step 4: Graceful end if no further input -->
     <Say>Thank you for calling. Goodbye!</Say>
@@ -65,7 +65,7 @@ async def generate_ai_reply(text: str) -> str:
     """Send transcript to Groq and return text reply."""
     headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
     payload = {
-        "model": "mixtral-8x7b",  # or "llama3-8b"
+        "model": "llama3-70b-8192",  # or "llama3-8b"
         "messages": [{"role": "user", "content": text}],
         "temperature": 0.7,
     }
@@ -160,7 +160,7 @@ async def audio_stream(websocket: WebSocket):
     dg_socket.on(LiveTranscriptionEvents.Transcript, on_transcript)
 
     # Start streaming to Deepgram
-    dg_socket.start(LiveOptions(model="nova-2-general", encoding="mulaw", sample_rate=8000))
+    dg_socket.start(LiveOptions(model="nova-2", encoding="mulaw", sample_rate=8000))
 
     try:
         while True:
