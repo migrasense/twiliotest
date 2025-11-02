@@ -27,15 +27,17 @@ async def twilio_voice():
     """TwiML that tells Twilio to stream audio to /audio."""
     stream_url = f"wss://{PUBLIC_URL.replace('https://','').replace('http://','')}/audio"
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
-    <Response>
-        <Say voice="Polly.Joanna">Hello! You are connected to the AI assistant.</Say>
-        <Start>
-            <Stream url="{stream_url}">
-                <Parameter name="caller" value="+18702735332"/>
-                <Parameter name="receiver" value="+19094135795"/>
-            </Stream>
-        </Start>
-    </Response>"""
+        <Response>
+            <Say voice="Polly.Joanna">You are now connected to the AI assistant.</Say>
+            <Start>
+                <Stream url="{stream_url}" track="inbound_track"
+                    content-type="audio/ulaw">
+                    <Parameter name="caller" value="+18702735332"/>
+                    <Parameter name="receiver" value="+19094135795"/>
+                </Stream>
+            </Start>
+        </Response>"""
+
     return Response(content=twiml, media_type="application/xml")
 
 # ======== AI PIPELINE ========
@@ -108,7 +110,7 @@ async def audio_stream(websocket: WebSocket):
     dg_socket.on("Error", lambda *_: print("❌ Deepgram error"))
     dg_socket.on("Close", lambda *_: print("👋 Deepgram closed"))
 
-    dg_socket.start(LiveOptions(model="nova-2-general", encoding="mulaw", sample_rate=8000))
+    dg_socket.start(LiveOptions(model="nova-2", encoding="mulaw", sample_rate=8000))
 
     try:
         while True:
