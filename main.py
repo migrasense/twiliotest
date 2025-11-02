@@ -50,7 +50,7 @@ async def twilio_voice():
     </Say>
 
     <!-- Step 3: Keep the line open for 45 seconds -->
-    <Pause length="300"/>
+    <Pause length="50"/>
 
     <!-- Step 4: Graceful end if no further input -->
     <Say>Thank you for calling. Goodbye!</Say>
@@ -96,34 +96,36 @@ async def synthesize_tts(text: str) -> bytes:
 # ======== WEBSOCKET HANDLER ========
 @app.websocket("/audio")
 async def audio_stream(websocket: WebSocket):
-    """Handles live Twilio ↔ Deepgram ↔ Groq ↔ Deepgram TTS ↔ Twilio (conversational)."""
+    """Handles live Twilio ↔ Deepgram ↔ Groq ↔ Deepgram TTS ↔ Twilio (continuous conversation)."""
     await websocket.accept()
     print("✅ WebSocket connected")
 
-    # Start Deepgram real-time listener
-    dg_socket = deepgram.listen.websocket.v("1")
+    dg_socket = deepgram.listen.live.v("1")
 
+    # ---- Process Transcript ----
     async def process_transcript(transcript):
-        """Handles a completed transcript → Groq → Deepgram TTS → send back."""
         transcript = transcript.strip()
         if not transcript:
             return
-
         print(f"🗣️ Heard: {transcript}")
+
+        # Generate AI reply
         ai_reply = await generate_ai_reply(transcript)
         print(f"🤖 AI: {ai_reply}")
 
-        # Synthesize AI reply
-        audio_bytes = await synthesize_tts(ai_reply)
-        if audio_bytes:
-            payload = base64.b64encode(audio_bytes).decode("utf-8")
-            await websocket.send_json({
-                "event": "media",
-                "media": {"payload": payload}
-            })
-            print("🎧 Sent reply audio to Twilio")
+        # Stream TTS audio back to Twilio in small packets (real-time playback)
+        try:
+            options = SpeakOptions(model="aura-asteria-en", encoding="mulaw", sample_rate=8000)
+            stream = deepgram.speak.v("1").stream({"text": ai_reply}, options)
+            for chunk in stream:
+                payload = base64.b64encode(chunk).decode("utf-8")
+                await websocket.send_json({"event": "media", "media": {"payload": payload}})
+                await asyncio.sleep(0.02)  # allow Twilio to buffer/play each small chunk
+            print("🎧 Finished streaming reply audio to Twilio")
+        except Exception as e:
+            print("TTS streaming error:", e)
 
-    # Event callback for Deepgram transcript
+    # ---- Deepgram Transcript Event ----
     def on_transcript(_, result, **kwargs):
         try:
             alt = result.channel.alternatives[0]
@@ -135,18 +137,17 @@ async def audio_stream(websocket: WebSocket):
         except Exception as e:
             print("Transcript error:", e)
 
-    # Deepgram connection events
-    dg_socket.on("Open", lambda *_: print("🎧 Deepgram connected"))
-    dg_socket.on("TranscriptReceived", on_transcript)
-    dg_socket.on("Error", lambda *_: print("❌ Deepgram error"))
-    dg_socket.on("Close", lambda *_: print("👋 Deepgram closed"))
+    # ---- Deepgram Events ----
+    dg_socket.on(LiveTranscriptionEvents.Open, lambda *_: print("🎧 Deepgram connected"))
+    dg_socket.on(LiveTranscriptionEvents.Close, lambda *_: print("👋 Deepgram closed"))
+    dg_socket.on(LiveTranscriptionEvents.Error, lambda *_: print("❌ Deepgram error"))
+    dg_socket.on(LiveTranscriptionEvents.Transcript, on_transcript)
 
-    # Start Deepgram stream
-    dg_socket.start(LiveOptions(model="nova-2-general", encoding="mulaw", sample_rate=8000))
+    # Start streaming to Deepgram
+    dg_socket.start(LiveOptions(model="nova-2", encoding="mulaw", sample_rate=8000))
 
     try:
         while True:
-            # Receive messages from Twilio stream
             message = await websocket.receive()
             data = message.get("text") or message.get("bytes")
 
@@ -158,19 +159,17 @@ async def audio_stream(websocket: WebSocket):
                 elif event.get("event") == "stop":
                     print("🛑 Twilio stopped")
                     break
-
             elif isinstance(data, (bytes, bytearray)):
                 dg_socket.send(data)
 
-            # Optional: small sleep to prevent idle disconnect
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(len(ai_reply.split()) * 0.05)
 
     except WebSocketDisconnect:
         print("❌ WebSocket disconnected")
-
     finally:
         dg_socket.finish()
         print("✅ Deepgram finished")
+
 
 
 # ======== CORE LOGIC ========
