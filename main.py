@@ -5,9 +5,8 @@ from fastapi.routing import APIRouter
 import os, json, base64, asyncio, uuid, requests
 from io import BytesIO
 from deepgram import DeepgramClient
-from deepgram.speak import SpeakOptions
-from deepgram.listen import LiveOptions
-from deepgram.core import EventType
+from deepgram import DeepgramClient, LiveOptions, LiveTranscriptionEvents, SpeakOptions
+
 
 app = FastAPI()
 app.add_middleware(
