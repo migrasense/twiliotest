@@ -96,8 +96,8 @@ async def audio_stream(websocket: WebSocket):
     def on_error(event, error, **kwargs):
         print(f"❌ Deepgram error: {error}")
 
-    dg_socket.on(EventType.TRANSCRIPT_RECEIVED, on_transcript)
-    dg_socket.on(EventType.ERROR, on_error)
+    dg_socket.on("TranscriptReceived", on_transcript)
+    dg_socket.on("Error", lambda dg, error, **kw: print("❌ Deepgram error:", error))
 
     dg_socket.start(
         LiveOptions(
