@@ -65,7 +65,7 @@ async def generate_ai_reply(text: str) -> str:
     """Send transcript to Groq and return text reply."""
     headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
     payload = {
-        "model": "mixtral-8x7b",  # or "llama3-8b"
+        "model": "llama-3.1-8b-instant",  # or "llama3-8b"
         "messages": [{"role": "user", "content": text}],
         "temperature": 0.7,
     }
@@ -153,7 +153,7 @@ async def audio_stream(websocket: WebSocket):
     dg_socket.on(LiveTranscriptionEvents.Transcript, on_transcript)
 
     # Start streaming to Deepgram
-    dg_socket.start(LiveOptions(model="nova-2-general", encoding="mulaw", sample_rate=8000))
+    dg_socket.start(LiveOptions(model="nova-2", encoding="mulaw", sample_rate=8000))
 
     try:
         while True:
