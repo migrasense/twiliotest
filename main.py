@@ -134,12 +134,15 @@ async def audio_stream(websocket: WebSocket):
         try:
             alt = result.channel.alternatives[0]
             if alt.transcript and getattr(result, "is_final", False):
-                asyncio.run_coroutine_threadsafe(
-                    process_transcript(alt.transcript),
-                    asyncio.get_event_loop(),
-                )
+                # ✅ Schedule the coroutine correctly
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.create_task(process_transcript(alt.transcript))
+                else:
+                    loop.run_until_complete(process_transcript(alt.transcript))
         except Exception as e:
             print("Transcript error:", e)
+
 
     # ---- Deepgram Events ----
     dg_socket.on(LiveTranscriptionEvents.Open, lambda *_: print("🎧 Deepgram connected"))
