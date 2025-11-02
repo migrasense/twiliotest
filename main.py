@@ -18,7 +18,7 @@ router = APIRouter()
 # ======== CONFIG ========
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-PUBLIC_URL = os.getenv("PUBLIC_URL", "https://your-render-app.onrender.com")
+PUBLIC_URL = os.getenv("PUBLIC_URL", "https://twiliotest-b4j9.onrender.com")
 deepgram = DeepgramClient(DEEPGRAM_API_KEY)
 
 # ======== TWILIO ENTRY POINT ========
