@@ -45,7 +45,7 @@ async def twilio_voice():
 
     <!-- Step 2: Greeting plays while Deepgram is already connected -->
     <Say voice="Polly.Joanna">
-        Hello! You’ve reached Servoice, your virtual assistant.
+        Hello! You've reached Servoice, your virtual assistant.
         How can I help you today?
     </Say>
 
@@ -65,7 +65,7 @@ async def generate_ai_reply(text: str) -> str:
     """Send transcript to Groq and return text reply."""
     headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
     payload = {
-        "model": "llama-3.1-8b-instant",  # or "llama3-8b"
+        "model": "mixtral-8x7b",  # or "llama3-8b"
         "messages": [{"role": "user", "content": text}],
         "temperature": 0.7,
     }
@@ -102,11 +102,13 @@ async def audio_stream(websocket: WebSocket):
 
     dg_socket = deepgram.listen.live.v("1")
     
-    # Get the event loop for this coroutine (main websocket handler thread)
-    event_loop = asyncio.get_event_loop()
+    # Capture the running event loop for thread-safe scheduling
+    loop = asyncio.get_event_loop()
+    stream_sid = None
 
     # ---- Process Transcript ----
     async def process_transcript(transcript):
+        nonlocal stream_sid
         transcript = transcript.strip()
         if not transcript:
             return
@@ -120,14 +122,22 @@ async def audio_stream(websocket: WebSocket):
         try:
             options = SpeakOptions(model="aura-asteria-en", encoding="mulaw", sample_rate=8000)
             stream = deepgram.speak.v("1").stream({"text": ai_reply}, options)
+            
             for chunk in stream:
-                payload = base64.b64encode(chunk).decode("utf-8")
-                await websocket.send_json({"event": "media", "media": {"payload": payload}})
-                await asyncio.sleep(0.02)  # allow Twilio to buffer/play each small chunk
+                if stream_sid:
+                    # Package audio for Twilio in the correct format
+                    payload = base64.b64encode(chunk).decode("utf-8")
+                    await websocket.send_json({
+                        "streamId": stream_sid,
+                        "event": "media",
+                        "media": {
+                            "payload": payload
+                        }
+                    })
+                await asyncio.sleep(0.01)  # Small delay for Twilio buffer
 
-            # ⏸️ Add small pause before allowing next user input
-            await asyncio.sleep(len(ai_reply.split()) * 0.05)
-
+            # ⏸️ Brief pause before allowing next user input
+            await asyncio.sleep(0.5)
             print("🎧 Finished streaming reply audio to Twilio")
         except Exception as e:
             print("TTS streaming error:", e)
@@ -137,11 +147,8 @@ async def audio_stream(websocket: WebSocket):
         try:
             alt = result.channel.alternatives[0]
             if alt.transcript and getattr(result, "is_final", False):
-                # ✅ Schedule the coroutine in the correct event loop using run_coroutine_threadsafe
-                asyncio.run_coroutine_threadsafe(
-                    process_transcript(alt.transcript),
-                    event_loop
-                )
+                # ✅ Schedule the coroutine on the main event loop from the background thread
+                loop.call_soon_threadsafe(asyncio.create_task, process_transcript(alt.transcript))
         except Exception as e:
             print("Transcript error:", e)
 
@@ -153,7 +160,7 @@ async def audio_stream(websocket: WebSocket):
     dg_socket.on(LiveTranscriptionEvents.Transcript, on_transcript)
 
     # Start streaming to Deepgram
-    dg_socket.start(LiveOptions(model="nova-2", encoding="mulaw", sample_rate=8000))
+    dg_socket.start(LiveOptions(model="nova-2-general", encoding="mulaw", sample_rate=8000))
 
     try:
         while True:
@@ -162,12 +169,20 @@ async def audio_stream(websocket: WebSocket):
 
             if isinstance(data, str):
                 event = json.loads(data)
-                if event.get("event") == "media":
+                event_type = event.get("event")
+                
+                if event_type == "start":
+                    stream_sid = event.get("start", {}).get("streamSid")
+                    print(f"📞 Stream started: {stream_sid}")
+                    
+                elif event_type == "media":
                     audio_payload = base64.b64decode(event["media"]["payload"])
                     dg_socket.send(audio_payload)
-                elif event.get("event") == "stop":
+                    
+                elif event_type == "stop":
                     print("🛑 Twilio stopped")
                     break
+                    
             elif isinstance(data, (bytes, bytearray)):
                 dg_socket.send(data)
 
