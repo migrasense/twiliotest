@@ -121,6 +121,10 @@ async def audio_stream(websocket: WebSocket):
                 payload = base64.b64encode(chunk).decode("utf-8")
                 await websocket.send_json({"event": "media", "media": {"payload": payload}})
                 await asyncio.sleep(0.02)  # allow Twilio to buffer/play each small chunk
+
+            # ⏸️ Add small pause before allowing next user input
+            await asyncio.sleep(len(ai_reply.split()) * 0.05)
+
             print("🎧 Finished streaming reply audio to Twilio")
         except Exception as e:
             print("TTS streaming error:", e)
@@ -144,7 +148,7 @@ async def audio_stream(websocket: WebSocket):
     dg_socket.on(LiveTranscriptionEvents.Transcript, on_transcript)
 
     # Start streaming to Deepgram
-    dg_socket.start(LiveOptions(model="nova-2", encoding="mulaw", sample_rate=8000))
+    dg_socket.start(LiveOptions(model="nova-2-general", encoding="mulaw", sample_rate=8000))
 
     try:
         while True:
@@ -162,13 +166,14 @@ async def audio_stream(websocket: WebSocket):
             elif isinstance(data, (bytes, bytearray)):
                 dg_socket.send(data)
 
-            await asyncio.sleep(len(ai_reply.split()) * 0.05)
+            await asyncio.sleep(0.01)
 
     except WebSocketDisconnect:
         print("❌ WebSocket disconnected")
     finally:
         dg_socket.finish()
         print("✅ Deepgram finished")
+
 
 
 
