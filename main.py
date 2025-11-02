@@ -21,24 +21,44 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 PUBLIC_URL = os.getenv("PUBLIC_URL", "https://twiliotest-b4j9.onrender.com")
 deepgram = DeepgramClient(DEEPGRAM_API_KEY)
 
-# ======== TWILIO ENTRY POINT ========
 @router.post("/twilio/voice")
 async def twilio_voice():
-    """TwiML that tells Twilio to stream audio to /audio."""
-    stream_url = f"wss://{PUBLIC_URL.replace('https://','').replace('http://','')}/audio"
+    """
+    Twilio webhook: greets caller, starts audio stream to Deepgram,
+    and pauses to let the user respond.
+    """
+    # your deployed Render URL
+    stream_url = "wss://twiliotest-b4j9.onrender.com/audio"
+
+    # ✅ TwiML with stream opened *before* greeting
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
-        <Response>
-            <Say voice="Polly.Joanna">You are now connected to the AI assistant.</Say>
-            <Start>
-                <Stream url="{stream_url}" track="inbound_track"
-                    content-type="audio/ulaw">
-                    <Parameter name="caller" value="+18702735332"/>
-                    <Parameter name="receiver" value="+19094135795"/>
-                </Stream>
-            </Start>
-        </Response>"""
+<Response>
+    <!-- Step 1: Start audio stream immediately -->
+    <Start>
+        <Stream url="{stream_url}"
+                content-type="audio/ulaw"
+                track="inbound_track">
+            <Parameter name="caller" value="+18702735332"/>
+            <Parameter name="receiver" value="+19094135795"/>
+        </Stream>
+    </Start>
+
+    <!-- Step 2: Greeting plays while Deepgram is already connected -->
+    <Say voice="Polly.Joanna">
+        Hello! You’ve reached Servoice, your virtual assistant.
+        How can I help you today?
+    </Say>
+
+    <!-- Step 3: Keep the line open for 45 seconds -->
+    <Pause length="45"/>
+
+    <!-- Step 4: Graceful end if no further input -->
+    <Say>Thank you for calling. Goodbye!</Say>
+    <Hangup/>
+</Response>"""
 
     return Response(content=twiml, media_type="application/xml")
+
 
 # ======== AI PIPELINE ========
 async def generate_ai_reply(text: str) -> str:
